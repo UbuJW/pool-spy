@@ -1,30 +1,80 @@
-# rest-clients-demo
+# Nicehash python library and command line rest api
 
-### Examples by language
+Dependency
+* requests
 
-- [python](https://github.com/nicehash/rest-clients-demo/blob/master/python/nicehash.py)
-- [bash](https://github.com/nicehash/rest-clients-demo/tree/master/bash)
-- [c#](https://github.com/nicehash/rest-clients-demo/blob/master/c%23/connect/connect/Hpo.cs)
-- [java](https://github.com/nicehash/rest-clients-demo/blob/master/java/src/main/java/Hpo.java)
-- [javascript](https://github.com/nicehash/rest-clients-demo/blob/master/javascript/hashpower.js)
-- [php](https://github.com/nicehash/rest-clients-demo/wiki/php-demo)
+To install dependencies run following line your favorite shell console
 
-### TEST environment
+    pip install requests
+    
+    
+## Required data and where to get it
+Following data is needed:
+* api base url: 
+    * https://api2.nicehash.com - Production environment
+    * https://api-test.nicehash.com - Test environment
+    
+The documentation how to get organisation id, api key and api key secret is here:
+https://github.com/nicehash/rest-clients-demo
 
-Generate Api key and Secret for test platform on:
+## Library usage
+Nicehash library is contained in file `nicehash.py`. Api is divided in two part: public and private.
+The script to print pool statistics is in the file `pool_spy.py`.
 
-https://test.nicehash.com (User / Settings / API Keys)
-Organization ID is displayed just above "+ Create new API key" button.
+Code snipplet for public api
 
-Use https://api-test.nicehash.com for API domain.
+    import nicehash
+    
+    host = 'https://api2.nicehash.com'
+    
+    public_api = nicehash.public_api(host)
+    
+    buy_info = public_api.buy_info()
+    print(buy_info)
+  
+    
+Code snipplet for private api
+    
+    import nicehash
+    
+    host = 'https://api2.nicehash.com'
+    organisation_id = 'Enter your organisation id'
+    key = 'Enter your api key'
+    secret = 'Enter your secret for api key' 
+    
+    private_api = nicehash.private_api(host, organisation_id, key, secret)
+    
+    my_accounts = private_api.get_accounts()
+    print(my_accounts)
 
-The entire platform runs on testnet. This means that you don’t have to use your own funds to test the platform. This is the opportunity to familiarize yourself with the new system, place hash-power orders and try trading without spending any real money.
+## Command line usage
+`pool_spy.py` can be used as command line tool
 
-![](https://raw.githubusercontent.com/nicehash/rest-clients-demo/master/generate_key.gif)
+To get help run:
 
-### PRODUCTION environment
+    python pool_spy.py -h
+    
+Result:
+    
+    Usage: pool_spy.py [options]
 
-To use production just generate key the same way on https://www.nicehash.com and use https://api2.nicehash.com for API domain.
+    Options:
+    -h, --help            show this help message and exit
+    -b BASE, --base_url BASE
+                          Api base url
+    -o ORG, --organization_id ORG
+                          Organization id
+    -k KEY, --key KEY     Api key
+    -s SECRET, --secret SECRET
+                          Secret for api key
+    -r RIGS [RIGS ...], --rigs RIGS [RIGS ...]
+                          Additional rigs
 
-### API docs
-Can be found here: https://docs.nicehash.com/
+
+
+Example usage:
+
+    python pool_spy.py -b https://api2.nicehash.com -o ca5622bd-bc32-451b-90a4-e9ae1088bade -k 85512ceb-4f37-426e-9fb4-929af9134ed1 -s 11260065-37f9-4875-bbdd-52a59ce7775de2c0596c-5c87-4739-bb60-b3f547612aed -r rig1 rig2
+    
+    
+    

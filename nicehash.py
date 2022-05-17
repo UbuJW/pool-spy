@@ -71,10 +71,12 @@ class public_api:
         return self.request('GET', '/exchange/api/v2/trades', 'market=' + market, None)
 
     def get_candlesticks(self, market, from_s, to_s, resolution):
-        return self.request('GET', '/exchange/api/v2/candlesticks', "market={}&from={}&to={}&resolution={}".format(market, from_s, to_s, resolution), None)
+        return self.request('GET', '/exchange/api/v2/candlesticks',
+                            "market={}&from={}&to={}&resolution={}".format(market, from_s, to_s, resolution), None)
 
     def get_exchange_orderbook(self, market, limit):
         return self.request('GET', '/exchange/api/v2/orderbook', "market={}&limit={}".format(market, limit), None)
+
 
 class private_api:
 
@@ -87,7 +89,7 @@ class private_api:
 
     def request(self, method, path, query, body):
 
-        xtime = self.get_epoch_ms_from_now()
+        xtime = self.get_epoch_ms()
         xnonce = str(uuid.uuid4())
 
         message = bytearray(self.key, 'utf-8')
@@ -145,10 +147,9 @@ class private_api:
         else:
             raise Exception(str(response.status_code) + ": " + response.reason)
 
-    def get_epoch_ms_from_now(self):
-        now = datetime.now()
-        now_ec_since_epoch = mktime(now.timetuple()) + now.microsecond / 1000000.0
-        return int(now_ec_since_epoch * 1000)
+    def get_epoch_ms(self, time=datetime.now()):
+        time_ec_since_epoch = mktime(time.timetuple()) + time.microsecond / 1000000.0
+        return int(time_ec_since_epoch * 1000)
 
     def algo_settings_from_response(self, algorithm, algo_response):
         algo_setting = None
@@ -186,7 +187,7 @@ class private_api:
 
     def get_my_active_orders(self, algorithm, market, limit):
 
-        ts = self.get_epoch_ms_from_now()
+        ts = self.get_epoch_ms()
         params = "algorithm={}&market={}&ts={}&limit={}&op=LT".format(algorithm, market, ts, limit)
 
         return self.request('GET', '/main/api/v2/hashpower/myOrders', params, None)
@@ -209,8 +210,8 @@ class private_api:
         return self.request('GET', '/main/api/v2/pools/', '', None)
 
     def get_hashpower_orderbook(self, algorithm):
-        return self.request('GET', '/main/api/v2/hashpower/orderBook/', 'algorithm=' + algorithm, None )
-    
+        return self.request('GET', '/main/api/v2/hashpower/orderBook/', 'algorithm=' + algorithm, None)
+
     def create_hashpower_order(self, market, type, algorithm, price, limit, amount, pool_id, algo_response):
 
         algo_setting = self.algo_settings_from_response(algorithm, algo_response)
@@ -275,7 +276,7 @@ class private_api:
         return self.request('GET', '/exchange/api/v2/myOrders', 'market=' + market, None)
 
     def get_my_exchange_trades(self, market):
-        return self.request('GET','/exchange/api/v2/myTrades', 'market=' + market, None)
+        return self.request('GET', '/exchange/api/v2/myTrades', 'market=' + market, None)
 
     def create_exchange_limit_order(self, market, side, quantity, price):
         query = "market={}&side={}&type=limit&quantity={}&price={}".format(market, side, quantity, price)
@@ -292,6 +293,14 @@ class private_api:
     def cancel_exchange_order(self, market, order_id):
         query = "market={}&orderId={}".format(market, order_id)
         return self.request('DELETE', '/exchange/api/v2/order', query, None)
+
+    def get_rigs(self):
+        query = ""
+        return self.request("GET", "/main/api/v2/mining/rigs2", query, None)
+
+    def get_rig_stats(self, rig_id, start_time, end_time, algorithm=20):
+        query = f'algorithm={algorithm}&rigId={rig_id}&afterTimestamp={start_time}&beforeTimestamp={end_time}'
+        return self.request("GET", f'/main/api/v2/mining/rig/stats/algo', query, None)
 
 
 if __name__ == "__main__":

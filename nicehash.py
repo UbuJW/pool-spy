@@ -1,12 +1,12 @@
-from datetime import datetime
-from time import mktime
-import uuid
 import hmac
-import requests
 import json
-from hashlib import sha256
 import optparse
-import sys
+import uuid
+from datetime import datetime
+from hashlib import sha256
+from time import mktime
+
+import requests
 
 
 class public_api:

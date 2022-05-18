@@ -56,19 +56,24 @@ To get help run:
     
 Result:
     
-    Usage: pool_spy.py [options]
-
-    Options:
-    -h, --help            show this help message and exit
-    -b BASE, --base_url BASE
-                          Api base url
-    -o ORG, --organization_id ORG
-                          Organization id
-    -k KEY, --key KEY     Api key
-    -s SECRET, --secret SECRET
-                          Secret for api key
-    -r RIGS [RIGS ...], --rigs RIGS [RIGS ...]
-                          Additional rigs
+    usage: pool_spy.py [-h] [-b BASE] -o ORG -k KEY -s SECRET [-r RIGS [RIGS ...]]
+                       [-d {1,2,3,4,5,6}] [-e END_DATETIME]
+    
+    optional arguments:
+      -h, --help            show this help message and exit
+      -b BASE, --base_url BASE
+                            Api base url
+      -o ORG, --organization_id ORG
+                            Organization id
+      -k KEY, --key KEY     Api key
+      -s SECRET, --secret SECRET
+                            Secret for api key
+      -r RIGS [RIGS ...], --rigs RIGS [RIGS ...]
+                            Additional rigs
+      -d {1,2,3,4,5,6}, --days {1,2,3,4,5,6}
+                            Lookback in days
+      -e END_DATETIME, --end_datetime END_DATETIME
+                            End datetime in UTC: yyyy-mm-dd-HH:MM:SS
 
 
 

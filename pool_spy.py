@@ -1,4 +1,5 @@
 import argparse
+import math
 from datetime import datetime, timedelta, timezone
 
 import pandas as pd
@@ -13,6 +14,10 @@ if __name__ == "__main__":
     parser.add_argument('-k', '--key', dest="key", help="Api key", required=True)
     parser.add_argument('-s', '--secret', dest="secret", help="Secret for api key", required=True)
     parser.add_argument('-r', '--rigs', dest='rigs', help="Additional rigs", nargs='+', default=[])
+    parser.add_argument('-d', '--days', dest='days', help="Lookback in days", type=int, choices=range(1, 7), default=7)
+    parser.add_argument('-e', '--end_datetime', dest='end_datetime', help='End datetime in UTC: yyyy-mm-dd-HH:MM:SS',
+                        type=lambda s: datetime.strptime(s, '%Y-%m-%d-%H-%M-%S').replace(tzinfo=timezone.utc),
+                        default=datetime.now(timezone.utc))
 
     args = parser.parse_args()
     private_api = private_api(args.base, args.org, args.key, args.secret)
@@ -20,22 +25,24 @@ if __name__ == "__main__":
     rig_ids_names = {rig['rigId']: rig['name'] for rig in rigs['miningRigs']}
     for rig in args.rigs:
         rig_ids_names[rig] = rig
-    now = datetime.now(timezone.utc)
-    nb_days = 7
-    start_time = now - timedelta(days=nb_days)
-    start_time_ms = private_api.get_epoch_ms(start_time)
-    end_time_ms = private_api.get_epoch_ms(now)
+    end_datetime = args.end_datetime.astimezone(timezone.utc)
+    nb_days = args.days
+    start_datetime = end_datetime - timedelta(days=nb_days)
+    start_timestamp = int(math.floor(start_datetime.astimezone().timestamp())*1000)
+    end_timestamp = int(math.ceil(end_datetime.astimezone().timestamp())*1000)
     df_results = pd.DataFrame(columns=['hours/day', 'MH/s', 'BTC/day'])
-    print(f'{start_time:%b %d %Y %H:%M:%S} UTC to {now:%b %d %Y %H:%M:%S} UTC')
+    print(f'{start_datetime:%b %d %Y %H:%M:%S %Z} to {end_datetime:%b %d %Y %H:%M:%S %Z}')
     for rig_id, rig_name in rig_ids_names.items():
-        stats = private_api.get_rig_stats(rig_id, start_time_ms, end_time_ms)
+        stats = private_api.get_rig_stats(rig_id, start_timestamp, end_timestamp)
         df = pd.DataFrame.from_records(stats['data'], columns=stats['columns'], index='time').sort_index()
+        df = df[['speed_accepted', 'profitability']]
         speed_diff = df['speed_accepted'].diff()
         start_times = df.index.values[:-1]
         end_times = df.index.values[1:]
         df = df.iloc[:-1]
         df['speed_diff'] = speed_diff[1:]
         df['time_delta'] = end_times - start_times
+        df.index = pd.to_datetime(df.index, unit='ms', utc=True)
         df = df[df['speed_diff'] != 0]
         avg_hr_per_day = df['time_delta'].sum() / 1000 / 60 / 60 / nb_days
         mh_per_sec = df[['speed_accepted', 'time_delta']].prod(axis=1).sum() / 1000 / 60 / 60 / 24 / nb_days

@@ -1,2 +1,3 @@
 .idea
 javascript/node_modules
+*.csv

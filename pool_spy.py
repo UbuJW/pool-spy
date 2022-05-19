@@ -16,7 +16,7 @@ if __name__ == "__main__":
     parser.add_argument('-r', '--rigs', dest='rigs', help="Additional rigs", nargs='+', default=[])
     parser.add_argument('-d', '--days', dest='days', help="Lookback in days", type=int, choices=range(1, 7), default=7)
     parser.add_argument('-e', '--end_datetime', dest='end_datetime', help='End datetime in UTC: yyyy-mm-dd-HH:MM:SS',
-                        type=lambda s: datetime.strptime(s, '%Y-%m-%d-%H-%M-%S').replace(tzinfo=timezone.utc),
+                        type=lambda s: datetime.strptime(s, '%Y-%m-%d-%H:%M:%S').replace(tzinfo=timezone.utc),
                         default=datetime.now(timezone.utc))
 
     args = parser.parse_args()
@@ -41,6 +41,7 @@ if __name__ == "__main__":
         end_times = df.index.values[1:]
         df = df.iloc[:-1]
         df['speed_diff'] = speed_diff[1:]
+        df['speed_diff'] = df['speed_diff'].fillna(0)
         df['time_delta'] = end_times - start_times
         df.index = pd.to_datetime(df.index, unit='ms', utc=True)
         df = df[df['speed_diff'] != 0]

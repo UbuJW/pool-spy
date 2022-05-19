@@ -1,10 +1,19 @@
 import argparse
 import math
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, time
 
 import pandas as pd
 
 from nicehash import private_api
+
+
+def try_parsing_datetime(s):
+    try:
+        return datetime.strptime(s, '%Y-%m-%d-%H:%M:%S').replace(tzinfo=timezone.utc)
+    except ValueError:
+        t = datetime.strptime(s, '%H:%M:%S')
+        return datetime.now(timezone.utc).replace(hour=t.hour, minute=t.minute, second=t.second)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -16,8 +25,7 @@ if __name__ == "__main__":
     parser.add_argument('-r', '--rigs', dest='rigs', help="Additional rigs", nargs='+', default=[])
     parser.add_argument('-d', '--days', dest='days', help="Lookback in days", type=int, choices=range(1, 7), default=7)
     parser.add_argument('-e', '--end_datetime', dest='end_datetime', help='End datetime in UTC: yyyy-mm-dd-HH:MM:SS',
-                        type=lambda s: datetime.strptime(s, '%Y-%m-%d-%H:%M:%S').replace(tzinfo=timezone.utc),
-                        default=datetime.now(timezone.utc))
+                        type=lambda s: try_parsing_datetime(s), default=datetime.now(timezone.utc))
 
     args = parser.parse_args()
     private_api = private_api(args.base, args.org, args.key, args.secret)
@@ -45,8 +53,9 @@ if __name__ == "__main__":
         df['time_delta'] = end_times - start_times
         df.index = pd.to_datetime(df.index, unit='ms', utc=True)
         df = df[df['speed_diff'] != 0]
-        avg_hr_per_day = df['time_delta'].sum() / 1000 / 60 / 60 / nb_days
-        mh_per_sec = df[['speed_accepted', 'time_delta']].prod(axis=1).sum() / 1000 / 60 / 60 / 24 / nb_days
+        total_ms = df['time_delta'].sum()
+        avg_hr_per_day = total_ms / 1000 / 60 / 60 / nb_days
+        mh_per_sec = df[['speed_accepted', 'time_delta']].prod(axis=1).sum() / total_ms if total_ms != 0 else 0
         profitability = df[['profitability', 'time_delta']].prod(axis=1).sum() / 1000 / 60 / 60 / 24 / nb_days
         df_results = df_results.append(pd.DataFrame([{'hours/day': avg_hr_per_day,
                                                       'MH/s': mh_per_sec, 'BTC/day': profitability}],

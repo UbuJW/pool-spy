@@ -1,6 +1,6 @@
 import argparse
 import math
-from datetime import datetime, timedelta, timezone, time
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 
@@ -36,26 +36,27 @@ if __name__ == "__main__":
     end_datetime = args.end_datetime.astimezone(timezone.utc)
     nb_days = args.days
     start_datetime = end_datetime - timedelta(days=nb_days)
-    start_timestamp = int(math.floor(start_datetime.astimezone().timestamp())*1000)
-    end_timestamp = int(math.ceil(end_datetime.astimezone().timestamp())*1000)
+    start_timestamp = int(math.floor(start_datetime.astimezone().timestamp()) * 1000)
+    end_timestamp = int(math.ceil(end_datetime.astimezone().timestamp()) * 1000)
     df_results = pd.DataFrame(columns=['hours/day', 'MH/s', 'BTC/day'])
     print(f'{start_datetime:%b %d %Y %H:%M:%S %Z} to {end_datetime:%b %d %Y %H:%M:%S %Z}')
     for rig_id, rig_name in rig_ids_names.items():
         stats = private_api.get_rig_stats(rig_id, start_timestamp, end_timestamp)
         df = pd.DataFrame.from_records(stats['data'], columns=stats['columns'], index='time').sort_index()
         df = df[['speed_accepted', 'profitability']]
-        speed_diff = df['speed_accepted'].diff()
+        speed_diff = df['speed_accepted'].diff().shift(-1)
         start_times = df.index.values[:-1]
         end_times = df.index.values[1:]
         df = df.iloc[:-1]
-        df['speed_diff'] = speed_diff[1:]
+        df['speed_diff'] = speed_diff
         df['speed_diff'] = df['speed_diff'].fillna(0)
         df['time_delta'] = end_times - start_times
+        df.loc[df['time_delta'] > 5 * 60 * 1000, 'speed_diff'] = 0
         df.index = pd.to_datetime(df.index, unit='ms', utc=True)
         df = df[df['speed_diff'] != 0]
-        total_ms = df['time_delta'].sum()
-        avg_hr_per_day = total_ms / 1000 / 60 / 60 / nb_days
-        mh_per_sec = df[['speed_accepted', 'time_delta']].prod(axis=1).sum() / total_ms if total_ms != 0 else 0
+        total_mining_ms = df['time_delta'].sum()
+        avg_hr_per_day = total_mining_ms / 1000 / 60 / 60 / nb_days
+        mh_per_sec = df[['speed_accepted', 'time_delta']].prod(axis=1).sum() / 1000 / 60 / 60 / 24 / nb_days
         profitability = df[['profitability', 'time_delta']].prod(axis=1).sum() / 1000 / 60 / 60 / 24 / nb_days
         df_results = df_results.append(pd.DataFrame([{'hours/day': avg_hr_per_day,
                                                       'MH/s': mh_per_sec, 'BTC/day': profitability}],

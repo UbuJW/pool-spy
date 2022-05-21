@@ -1,6 +1,7 @@
 import hmac
 import json
 import optparse
+import urllib.parse
 import uuid
 from datetime import datetime
 from hashlib import sha256
@@ -298,8 +299,12 @@ class private_api:
         query = ""
         return self.request("GET", "/main/api/v2/mining/rigs2", query, None)
 
-    def get_rig_stats(self, rig_id, start_time, end_time, algorithm=20):
-        query = f'algorithm={algorithm}&rigId={rig_id}&afterTimestamp={start_time}&beforeTimestamp={end_time}'
+    def get_rig_stats(self, rig_id, start_time=None, end_time=None, algorithm=20):
+        query = f'algorithm={algorithm}&rigId={urllib.parse.quote(rig_id)}'
+        if start_time is not None:
+            query += f'&afterTimestamp={start_time}'
+        if end_time is not None:
+            query += f'&beforeTimestamp={end_time}'
         return self.request("GET", f'/main/api/v2/mining/rig/stats/algo', query, None)
 
 

@@ -1,5 +1,6 @@
 import argparse
 import math
+import os.path
 from datetime import datetime, timedelta, timezone
 
 import pandas as pd
@@ -26,6 +27,7 @@ if __name__ == "__main__":
     parser.add_argument('-d', '--days', dest='days', help="Lookback in days", type=int, choices=range(1, 7), default=7)
     parser.add_argument('-e', '--end_datetime', dest='end_datetime', help='End datetime in UTC: yyyy-mm-dd-HH:MM:SS',
                         type=lambda s: try_parsing_datetime(s), default=datetime.now(timezone.utc))
+    parser.add_argument('-m', '--monthly', dest='monthly', help="Monthly report", action='store_true')
 
     args = parser.parse_args()
     private_api = private_api(args.base, args.org, args.key, args.secret)
@@ -34,8 +36,12 @@ if __name__ == "__main__":
     for rig in args.rigs:
         rig_ids_names[rig] = rig
     end_datetime = args.end_datetime.astimezone(timezone.utc)
-    nb_days = args.days
-    start_datetime = end_datetime - timedelta(days=nb_days)
+    if args.monthly:
+        start_datetime = datetime(end_datetime.year, end_datetime.month, 1, tzinfo=end_datetime.tzinfo)
+        nb_days = (end_datetime-start_datetime).total_seconds()/timedelta(days=1).total_seconds()
+    else:
+        nb_days = args.days
+        start_datetime = end_datetime - timedelta(days=nb_days)
     start_timestamp = int(math.floor(start_datetime.astimezone().timestamp()) * 1000)
     end_timestamp = int(math.ceil(end_datetime.astimezone().timestamp()) * 1000)
     df_results = pd.DataFrame(columns=['hours/day', 'MH/s', 'BTC/day'])
@@ -43,14 +49,20 @@ if __name__ == "__main__":
     for rig_id, rig_name in rig_ids_names.items():
         stats = private_api.get_rig_stats(rig_id, start_timestamp, end_timestamp)
         df = pd.DataFrame.from_records(stats['data'], columns=stats['columns'], index='time').sort_index()
+        if args.monthly:
+            filename = f'{args.org}_{rig_id}_{end_datetime:%Y_%m}.csv'
+            if os.path.exists(filename):
+                df = df.append(pd.read_csv(filename, index_col='time'))
+                df = df[df.index.duplicated(keep='first')].sort_index()
+            df.to_csv(filename)
         df = df[['speed_accepted', 'profitability']]
-        speed_diff = df['speed_accepted'].diff().shift(-1)
+        speed_diff = df.loc[:, 'speed_accepted'].diff().shift(-1)
         start_times = df.index.values[:-1]
         end_times = df.index.values[1:]
         df = df.iloc[:-1]
         df['speed_diff'] = speed_diff
         df['speed_diff'] = df['speed_diff'].fillna(0)
-        df['time_delta'] = end_times - start_times
+        df['time_delta'] = end_times - start_times if any(end_times) else 0
         df.loc[df['time_delta'] > 5 * 60 * 1000, 'speed_diff'] = 0
         df.index = pd.to_datetime(df.index, unit='ms', utc=True)
         df = df[df['speed_diff'] != 0]
@@ -61,7 +73,9 @@ if __name__ == "__main__":
         df_results = df_results.append(pd.DataFrame([{'hours/day': avg_hr_per_day,
                                                       'MH/s': mh_per_sec, 'BTC/day': profitability}],
                                                     columns=df_results.columns, index=[rig_name]))
+    df_results['\u03BCBTC/day'] = df_results['BTC/day']*10**6
+    df_results = df_results.drop(columns='BTC/day')
     print(df_results.sort_index().to_string(formatters={'hours/day': '{:,.2f}'.format, 'MH/s': '{:,.2f}'.format,
-                                                        'BTC/day': '{:,.8f}'.format}))
+                                                        '\u03BCBTC/day': '{:,.2f}'.format}))
 
     exit(0)

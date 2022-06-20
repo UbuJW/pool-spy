@@ -78,6 +78,8 @@ if __name__ == "__main__":
         df_results = df_results.append(pd.DataFrame([{'hours/day': avg_hr_per_day,
                                                       'MH/s': mh_per_sec, '\u03BCBTC/day': profitability * 10**6}],
                                                     columns=df_results.columns, index=[rig_name]))
-    print(df_results.sort_index().to_string(formatters={'hours/day': '{:,.2f}'.format, 'MH/s': '{:,.2f}'.format,
+    df_results = df_results.sort_index()
+    df_results.loc["Total"] = df_results.sum()
+    print(df_results.to_string(formatters={'hours/day': '{:,.2f}'.format, 'MH/s': '{:,.2f}'.format,
                                                         '\u03BCBTC/day': '{:,.2f}'.format}))
     exit(0)

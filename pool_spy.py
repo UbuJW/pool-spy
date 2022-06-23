@@ -28,6 +28,8 @@ if __name__ == "__main__":
     parser.add_argument('-e', '--end_datetime', dest='end_datetime', help='End datetime in UTC: yyyy-mm-dd-HH:MM:SS',
                         type=lambda s: try_parsing_datetime(s), default=datetime.now(timezone.utc))
     parser.add_argument('-m', '--monthly', dest='monthly', help="Monthly report", action='store_true')
+    parser.add_argument('-di', '--discord-id', dest='discord_id', help='Discord ID')
+    parser.add_argument('-dt', '--discord-token', dest='discord_token', help='Discord Token')
     args = parser.parse_args()
 
     private_api = private_api(args.base, args.org, args.key, args.secret)
@@ -38,7 +40,7 @@ if __name__ == "__main__":
     end_datetime = args.end_datetime.astimezone(timezone.utc)
     if args.monthly:
         start_datetime = datetime(end_datetime.year, end_datetime.month, 1, tzinfo=end_datetime.tzinfo)
-        nb_days = (end_datetime - start_datetime) / timedelta(microseconds=1) / 10**6 / 60 / 60 / 24
+        nb_days = (end_datetime - start_datetime) / timedelta(microseconds=1) / 10 ** 6 / 60 / 60 / 24
     else:
         nb_days = args.days
         start_datetime = end_datetime - timedelta(days=nb_days)
@@ -47,6 +49,7 @@ if __name__ == "__main__":
     df_results = pd.DataFrame(columns=['hours/day', 'MH/s', '\u03BCBTC/day'])
     if args.label is not None:
         print(f'{args.label} {end_datetime:%B}' if args.monthly else args.label)
+
     print(f'{start_datetime:%b %d %Y %H:%M:%S %Z} to {end_datetime:%b %d %Y %H:%M:%S %Z}')
     for rig_id, rig_name in rig_ids_names.items():
         stats = private_api.get_rig_stats(rig_id, start_timestamp, end_timestamp)
@@ -76,10 +79,22 @@ if __name__ == "__main__":
         mh_per_sec = df[['speed_accepted', 'time_delta']].prod(axis=1).sum() / 1000 / 60 / 60 / 24 / nb_days
         profitability = df[['profitability', 'time_delta']].prod(axis=1).sum() / 1000 / 60 / 60 / 24 / nb_days
         df_results = df_results.append(pd.DataFrame([{'hours/day': avg_hr_per_day,
-                                                      'MH/s': mh_per_sec, '\u03BCBTC/day': profitability * 10**6}],
+                                                      'MH/s': mh_per_sec, '\u03BCBTC/day': profitability * 10 ** 6}],
                                                     columns=df_results.columns, index=[rig_name]))
     df_results = df_results.sort_index()
     df_results.loc["Total"] = df_results.sum()
-    print(df_results.to_string(formatters={'hours/day': '{:,.2f}'.format, 'MH/s': '{:,.2f}'.format,
-                                                        '\u03BCBTC/day': '{:,.2f}'.format}))
+    results_str = df_results.to_string(formatters={'hours/day': '{:,.2f}'.format, 'MH/s': '{:,.2f}'.format,
+                                                   '\u03BCBTC/day': '{:,.2f}'.format})
+    print(results_str)
+
+    if args.discord_id is None or args.discord_token is None:
+        exit(0)
+    from discord import Webhook, RequestsWebhookAdapter, Embed
+    webhook = Webhook.partial(args.discord_id, args.discord_token, adapter=RequestsWebhookAdapter())
+    embed = Embed()
+    embed.title = f'{args.label} {end_datetime:%B}' if args.monthly else args.label
+    embed.colour = 15258703
+    embed.description = f'```{start_datetime:%b %d %Y %H:%M:%S %Z} to {end_datetime:%b %d %Y %H:%M:%S %Z}\n' \
+                        f'{results_str}```'
+    webhook.send(username='Earn Your Hours', embed=embed)
     exit(0)

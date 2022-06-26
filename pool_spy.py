@@ -49,6 +49,7 @@ if __name__ == "__main__":
     df_results = pd.DataFrame(columns=['hours/day', 'MH/s', '\u03BCBTC/day'])
     if args.label is not None:
         print(f'{args.label} {end_datetime:%B}' if args.monthly else args.label)
+    dict_daily_hours = {}
 
     print(f'{start_datetime:%b %d %Y %H:%M:%S %Z} to {end_datetime:%b %d %Y %H:%M:%S %Z}')
     for rig_id, rig_name in rig_ids_names.items():
@@ -74,6 +75,7 @@ if __name__ == "__main__":
         df.loc[df['time_delta'] > 5 * 60 * 1000, 'speed_diff'] = 0
         df.index = pd.to_datetime(df.index, unit='ms', utc=True)
         df = df[df['speed_diff'] != 0]
+        dict_daily_hours[rig_name] = df.groupby(df.index.date).sum()['time_delta']/1000/60/60
         total_mining_ms = df['time_delta'].sum()
         avg_hr_per_day = total_mining_ms / 1000 / 60 / 60 / nb_days
         mh_per_sec = df[['speed_accepted', 'time_delta']].prod(axis=1).sum() / 1000 / 60 / 60 / 24 / nb_days
@@ -81,6 +83,7 @@ if __name__ == "__main__":
         df_results = df_results.append(pd.DataFrame([{'hours/day': avg_hr_per_day,
                                                       'MH/s': mh_per_sec, '\u03BCBTC/day': profitability * 10 ** 6}],
                                                     columns=df_results.columns, index=[rig_name]))
+    pd.concat(dict_daily_hours, axis=1).fillna(0).sort_index().to_csv(f'daily_hours_{args.org}_{end_datetime:%Y_%m}.csv')
     df_results = df_results.sort_index()
     df_results.loc["Total"] = df_results.sum()
     results_str = df_results.to_string(formatters={'hours/day': '{:,.2f}'.format, 'MH/s': '{:,.2f}'.format,

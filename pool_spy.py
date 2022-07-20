@@ -112,5 +112,5 @@ if __name__ == "__main__":
     if args.publish_daily:
         with open(file=f'daily_hours_{args.org}_{start_datetime:%Y_%m}.csv', mode='rb') as f:
             daily_hours_file = File(f)
-        webhook.send(username='Earn Your Hours', file=daily_hours_file)
+        webhook.send(username='Earn Your Hours', content=embed.title, file=daily_hours_file)
     exit(0)

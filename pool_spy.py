@@ -1,7 +1,8 @@
 import argparse
 import math
 import os.path
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, time
+from dateutil.relativedelta import relativedelta
 
 import pandas as pd
 
@@ -25,11 +26,16 @@ if __name__ == "__main__":
     parser.add_argument('-s', '--secret', dest="secret", help="Secret for api key", required=True)
     parser.add_argument('-r', '--rigs', dest='rigs', help="Additional rigs", nargs='+', default=[])
     parser.add_argument('-d', '--days', dest='days', help="Lookback in days", type=int, choices=range(1, 7), default=7)
-    parser.add_argument('-e', '--end_datetime', dest='end_datetime', help='End datetime in UTC: yyyy-mm-dd-HH:MM:SS',
+    parser.add_argument('-e', '--end_datetime', dest='end_datetime',
+                        help='End datetime or time in UTC: yyyy-mm-dd-HH:MM:SS or HH:MM:SS',
                         type=lambda s: try_parsing_datetime(s), default=datetime.now(timezone.utc))
     parser.add_argument('-m', '--monthly', dest='monthly', help="Monthly report", action='store_true')
     parser.add_argument('-di', '--discord-id', dest='discord_id', help='Discord ID')
     parser.add_argument('-dt', '--discord-token', dest='discord_token', help='Discord Token')
+    parser.add_argument('-pm', '--publish_monthly', dest='publish_monthly', help="Publish monthly report",
+                        action='store_true')
+    parser.add_argument('-pd', '--publish_daily', dest='publish_daily', help="Publish daily report",
+                        action='store_true')
     args = parser.parse_args()
 
     private_api = private_api(args.base, args.org, args.key, args.secret)
@@ -40,6 +46,8 @@ if __name__ == "__main__":
     end_datetime = args.end_datetime.astimezone(timezone.utc)
     if args.monthly:
         start_datetime = datetime(end_datetime.year, end_datetime.month, 1, tzinfo=end_datetime.tzinfo)
+        if end_datetime.day == 1 and end_datetime.time() == time(0, 0):
+            start_datetime = start_datetime - relativedelta(months=1)
         nb_days = (end_datetime - start_datetime) / timedelta(microseconds=1) / 10 ** 6 / 60 / 60 / 24
     else:
         nb_days = args.days
@@ -92,12 +100,17 @@ if __name__ == "__main__":
 
     if args.discord_id is None or args.discord_token is None:
         exit(0)
-    from discord import Webhook, RequestsWebhookAdapter, Embed
+    from discord import Webhook, RequestsWebhookAdapter, Embed, File
     webhook = Webhook.partial(args.discord_id, args.discord_token, adapter=RequestsWebhookAdapter())
     embed = Embed()
     embed.title = f'{args.label} {end_datetime:%B}' if args.monthly else args.label
     embed.colour = 15258703
     embed.description = f'```{start_datetime:%b %d %Y %H:%M:%S %Z} to {end_datetime:%b %d %Y %H:%M:%S %Z}\n' \
                         f'{results_str}```'
-    webhook.send(username='Earn Your Hours', embed=embed)
+    if args.publish_monthly:
+        webhook.send(username='Earn Your Hours', embed=embed)
+    if args.publish_daily:
+        with open(file=f'daily_hours_{args.org}_{start_datetime:%Y_%m}.csv', mode='rb') as f:
+            daily_hours_file = File(f)
+        webhook.send(username='Earn Your Hours', file=daily_hours_file)
     exit(0)

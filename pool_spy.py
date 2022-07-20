@@ -91,7 +91,7 @@ if __name__ == "__main__":
         df_results = df_results.append(pd.DataFrame([{'hours/day': avg_hr_per_day,
                                                       'MH/s': mh_per_sec, '\u03BCBTC/day': profitability * 10 ** 6}],
                                                     columns=df_results.columns, index=[rig_name]))
-    pd.concat(dict_daily_hours, axis=1).fillna(0).sort_index().to_csv(f'daily_hours_{args.org}_{end_datetime:%Y_%m}.csv')
+    pd.concat(dict_daily_hours, axis=1, sort=True).fillna(0).to_csv(f'daily_hours_{args.org}_{end_datetime:%Y_%m}.csv')
     df_results = df_results.sort_index()
     df_results.loc["Total"] = df_results.sum()
     results_str = df_results.to_string(formatters={'hours/day': '{:,.2f}'.format, 'MH/s': '{:,.2f}'.format,
@@ -108,9 +108,11 @@ if __name__ == "__main__":
     embed.description = f'```{start_datetime:%b %d %Y %H:%M:%S %Z} to {end_datetime:%b %d %Y %H:%M:%S %Z}\n' \
                         f'{results_str}```'
     if args.publish_monthly:
+        print('Publish monthly report')
         webhook.send(username='Earn Your Hours', embed=embed)
     if args.publish_daily:
+        print('Publish daily report')
         with open(file=f'daily_hours_{args.org}_{start_datetime:%Y_%m}.csv', mode='rb') as f:
             daily_hours_file = File(f)
-        webhook.send(username='Earn Your Hours', file=daily_hours_file)
+        webhook.send(username='Earn Your Hours', content=embed.title, file=daily_hours_file)
     exit(0)

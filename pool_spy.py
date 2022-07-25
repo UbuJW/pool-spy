@@ -1,4 +1,5 @@
 import argparse
+import json
 import math
 import os.path
 from datetime import datetime, timedelta, timezone, time
@@ -38,11 +39,6 @@ if __name__ == "__main__":
                         action='store_true')
     args = parser.parse_args()
 
-    private_api = private_api(args.base, args.org, args.key, args.secret)
-    rigs = private_api.get_rigs()
-    rig_ids_names = {rig['rigId']: rig['name'] for rig in rigs['miningRigs']}
-    for rig in args.rigs:
-        rig_ids_names[rig] = rig
     end_datetime = args.end_datetime.astimezone(timezone.utc)
     if args.monthly:
         start_datetime = datetime(end_datetime.year, end_datetime.month, 1, tzinfo=end_datetime.tzinfo)
@@ -52,11 +48,26 @@ if __name__ == "__main__":
     else:
         nb_days = args.days
         start_datetime = end_datetime - timedelta(days=nb_days)
+
+    rigs_filepath = f'rigs_{args.org}_{start_datetime:%Y_%m}.json'
+    if os.path.exists(rigs_filepath):
+        with open(rigs_filepath, 'r') as fp:
+            rig_ids_names = json.load(fp)
+    else:
+        rig_ids_names = {}
+    private_api = private_api(args.base, args.org, args.key, args.secret)
+    for rig in private_api.get_rigs()['miningRigs']:
+        rig_ids_names[rig['rigId']] = rig['name']
+    for rig in args.rigs:
+        rig_ids_names[rig] = rig
+    with open(rigs_filepath, 'w') as fp:
+        json.dump(rig_ids_names, fp)
+
     start_timestamp = int(math.floor(start_datetime.astimezone().timestamp()) * 1000)
     end_timestamp = int(math.ceil(end_datetime.astimezone().timestamp()) * 1000)
     df_results = pd.DataFrame(columns=['hours/day', 'MH/s', '\u03BCBTC/day'])
     if args.label is not None:
-        print(f'{args.label} {end_datetime:%B}' if args.monthly else args.label)
+        print(f'{args.label} {start_datetime:%B}' if args.monthly else args.label)
     dict_daily_hours = {}
 
     print(f'{start_datetime:%b %d %Y %H:%M:%S %Z} to {end_datetime:%b %d %Y %H:%M:%S %Z}')
@@ -64,7 +75,7 @@ if __name__ == "__main__":
         stats = private_api.get_rig_stats(rig_id, start_timestamp, end_timestamp)
         df = pd.DataFrame.from_records(stats['data'], columns=stats['columns'], index='time').sort_index()
         if args.monthly:
-            filename = f'{args.org}_{rig_id}_{end_datetime:%Y_%m}.csv'
+            filename = f'{args.org}_{rig_id}_{start_datetime:%Y_%m}.csv'
             if os.path.exists(filename):
                 df_cache = pd.read_csv(filename, index_col='time')
                 if len(df) > 0:
@@ -91,7 +102,7 @@ if __name__ == "__main__":
         df_results = df_results.append(pd.DataFrame([{'hours/day': avg_hr_per_day,
                                                       'MH/s': mh_per_sec, '\u03BCBTC/day': profitability * 10 ** 6}],
                                                     columns=df_results.columns, index=[rig_name]))
-    pd.concat(dict_daily_hours, axis=1, sort=True).fillna(0).to_csv(f'daily_hours_{args.org}_{end_datetime:%Y_%m}.csv')
+    pd.concat(dict_daily_hours, axis=1, sort=True).fillna(0).to_csv(f'daily_hours_{args.org}_{start_datetime:%Y_%m}.csv')
     df_results = df_results.sort_index()
     df_results.loc["Total"] = df_results.sum()
     results_str = df_results.to_string(formatters={'hours/day': '{:,.2f}'.format, 'MH/s': '{:,.2f}'.format,
@@ -103,7 +114,7 @@ if __name__ == "__main__":
     from discord import Webhook, RequestsWebhookAdapter, Embed, File
     webhook = Webhook.partial(args.discord_id, args.discord_token, adapter=RequestsWebhookAdapter())
     embed = Embed()
-    embed.title = f'{args.label} {end_datetime:%B}' if args.monthly else args.label
+    embed.title = f'{args.label} {start_datetime:%B}' if args.monthly else args.label
     embed.colour = 15258703
     embed.description = f'```{start_datetime:%b %d %Y %H:%M:%S %Z} to {end_datetime:%b %d %Y %H:%M:%S %Z}\n' \
                         f'{results_str}```'

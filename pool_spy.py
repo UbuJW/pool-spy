@@ -57,7 +57,8 @@ if __name__ == "__main__":
         rig_ids_names = {}
     private_api = private_api(args.base, args.org, args.key, args.secret)
     registered_rigs = {rig['rigId']: rig['name'] for rig in private_api.get_rigs()['miningRigs']}
-    rig_ids_names |= registered_rigs #| {rig: rig for rig in args.rigs}
+    # rig_ids_names |= registered_rigs #| {rig: rig for rig in args.rigs} # for 3.9
+    rig_ids_names = {**rig_ids_names, **registered_rigs}
     with open(rigs_filepath, 'w') as fp:
         json.dump(rig_ids_names, fp)
 

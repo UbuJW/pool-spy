@@ -25,7 +25,7 @@ if __name__ == "__main__":
     parser.add_argument('-o', '--organization_id', dest="org", help="Organization id", required=True)
     parser.add_argument('-k', '--key', dest="key", help="Api key", required=True)
     parser.add_argument('-s', '--secret', dest="secret", help="Secret for api key", required=True)
-    #parser.add_argument('-r', '--rigs', dest='rigs', help="Additional rigs", nargs='+', default=[])
+    # parser.add_argument('-r', '--rigs', dest='rigs', help="Additional rigs", nargs='+', default=[])
     parser.add_argument('-d', '--days', dest='days', help="Lookback in days", type=int, choices=range(1, 7), default=7)
     parser.add_argument('-e', '--end_datetime', dest='end_datetime',
                         help='End datetime or time in UTC: yyyy-mm-dd-HH:MM:SS or HH:MM:SS',
@@ -106,8 +106,11 @@ if __name__ == "__main__":
     df_daily_hours.to_csv(f'daily_hours_{args.org}_{start_datetime:%Y_%m}.csv')
     import matplotlib.dates as md
     import matplotlib.pyplot as plt
+
     plt.gca().xaxis.set_major_formatter(md.DateFormatter('%H:%M'))
-    fig = df_daily_hours.expanding().mean().plot(title=f'{title} cumulative average hours').get_figure()
+    fig = df_daily_hours.expanding().mean().plot(title=f'{title} cumulative average hours',
+                                                 yticks=range(0, 25, 2)).get_figure()
+    plt.axhline(y=8, color='r', linestyle='--')
     plt.gca().xaxis.set_major_formatter(md.DateFormatter('%d'))
     fig.savefig(f'daily_hours_{args.org}_{start_datetime:%Y_%m}.png')
     df_results = df_results.sort_index()
@@ -115,12 +118,17 @@ if __name__ == "__main__":
     df_results.index.name = 'rig'
     # df_results.to_string(formatters={'hours/day': '{:,.2f}'.format, 'MH/s': '{:,.2f}'.format,
     #                                    '\u03BCBTC/day': '{:,.2f}'.format})
-    results_str = df_results.to_markdown(floatfmt='.2f', tablefmt='github')
+    df_results.to_markdown(floatfmt='.2f', tablefmt='github')
+    lines = df_results.to_markdown(floatfmt='.2f', tablefmt='github').splitlines()
+    lines.insert(-1, lines[1])
+    lines[1] = lines[1].replace('-', '=')
+    results_str = os.linesep.join(lines)
     print(results_str)
 
     if args.discord_id is None or args.discord_token is None:
         exit(0)
     from discord import Webhook, RequestsWebhookAdapter, Embed, File
+
     webhook = Webhook.partial(args.discord_id, args.discord_token, adapter=RequestsWebhookAdapter())
     embed = Embed()
     embed.title = title

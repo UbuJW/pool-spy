@@ -25,7 +25,7 @@ if __name__ == "__main__":
     parser.add_argument('-o', '--organization_id', dest="org", help="Organization id", required=True)
     parser.add_argument('-k', '--key', dest="key", help="Api key", required=True)
     parser.add_argument('-s', '--secret', dest="secret", help="Secret for api key", required=True)
-    parser.add_argument('-r', '--rigs', dest='rigs', help="Additional rigs", nargs='+', default=[])
+    #parser.add_argument('-r', '--rigs', dest='rigs', help="Additional rigs", nargs='+', default=[])
     parser.add_argument('-d', '--days', dest='days', help="Lookback in days", type=int, choices=range(1, 7), default=7)
     parser.add_argument('-e', '--end_datetime', dest='end_datetime',
                         help='End datetime or time in UTC: yyyy-mm-dd-HH:MM:SS or HH:MM:SS',
@@ -56,18 +56,17 @@ if __name__ == "__main__":
     else:
         rig_ids_names = {}
     private_api = private_api(args.base, args.org, args.key, args.secret)
-    for rig in private_api.get_rigs()['miningRigs']:
-        rig_ids_names[rig['rigId']] = rig['name']
-    for rig in args.rigs:
-        rig_ids_names[rig] = rig
+    registered_rigs = {rig['rigId']: rig['name'] for rig in private_api.get_rigs()['miningRigs']}
+    rig_ids_names |= registered_rigs #| {rig: rig for rig in args.rigs}
     with open(rigs_filepath, 'w') as fp:
         json.dump(rig_ids_names, fp)
 
     start_timestamp = int(math.floor(start_datetime.astimezone().timestamp()) * 1000)
     end_timestamp = int(math.ceil(end_datetime.astimezone().timestamp()) * 1000)
     df_results = pd.DataFrame(columns=['hours/day', 'MH/s', '\u03BCBTC/day'])
+    title = f'{args.label} {start_datetime:%B %Y}' if args.monthly else args.label
     if args.label is not None:
-        print(f'{args.label} {start_datetime:%B}' if args.monthly else args.label)
+        print(title)
     dict_daily_hours = {}
 
     print(f'{start_datetime:%b %d %Y %H:%M:%S %Z} to {end_datetime:%b %d %Y %H:%M:%S %Z}')
@@ -80,7 +79,7 @@ if __name__ == "__main__":
                 df_cache = pd.read_csv(filename, index_col='time')
                 if len(df) > 0:
                     df_cache = df_cache[df_cache.index < df.index[0]]
-                df = df_cache.append(df, sort=True)
+                df = pd.concat([df_cache, df], sort=True)
                 assert not any(df.index.duplicated())
             df.reindex(sorted(df.columns), axis=1).to_csv(filename)
         df = df[['speed_accepted', 'profitability']]
@@ -94,19 +93,28 @@ if __name__ == "__main__":
         df.loc[df['time_delta'] > 5 * 60 * 1000, 'speed_diff'] = 0
         df.index = pd.to_datetime(df.index, unit='ms', utc=True)
         df = df[df['speed_diff'] != 0]
-        dict_daily_hours[rig_name] = df.groupby(df.index.date).sum()['time_delta']/1000/60/60
+        dict_daily_hours[rig_name] = df.groupby(df.index.date).sum()['time_delta'] / 1000 / 60 / 60
         total_mining_ms = df['time_delta'].sum()
         avg_hr_per_day = total_mining_ms / 1000 / 60 / 60 / nb_days
         mh_per_sec = df[['speed_accepted', 'time_delta']].prod(axis=1).sum() / 1000 / 60 / 60 / 24 / nb_days
         profitability = df[['profitability', 'time_delta']].prod(axis=1).sum() / 1000 / 60 / 60 / 24 / nb_days
-        df_results = df_results.append(pd.DataFrame([{'hours/day': avg_hr_per_day,
-                                                      'MH/s': mh_per_sec, '\u03BCBTC/day': profitability * 10 ** 6}],
-                                                    columns=df_results.columns, index=[rig_name]))
-    pd.concat(dict_daily_hours, axis=1, sort=True).fillna(0).to_csv(f'daily_hours_{args.org}_{start_datetime:%Y_%m}.csv')
+        df_results = pd.concat([df_results, pd.DataFrame([{'hours/day': avg_hr_per_day, 'MH/s': mh_per_sec,
+                                                           '\u03BCBTC/day': profitability * 10 ** 6}],
+                                                         columns=df_results.columns, index=[rig_name])])
+    df_daily_hours = pd.concat(dict_daily_hours, axis=1, sort=True).fillna(0)
+    df_daily_hours.to_csv(f'daily_hours_{args.org}_{start_datetime:%Y_%m}.csv')
+    import matplotlib.dates as md
+    import matplotlib.pyplot as plt
+    plt.gca().xaxis.set_major_formatter(md.DateFormatter('%H:%M'))
+    fig = df_daily_hours.expanding().mean().plot(title=f'{title} cumulative average hours').get_figure()
+    plt.gca().xaxis.set_major_formatter(md.DateFormatter('%d'))
+    fig.savefig(f'daily_hours_{args.org}_{start_datetime:%Y_%m}.png')
     df_results = df_results.sort_index()
     df_results.loc["Total"] = df_results.sum()
-    results_str = df_results.to_string(formatters={'hours/day': '{:,.2f}'.format, 'MH/s': '{:,.2f}'.format,
-                                                   '\u03BCBTC/day': '{:,.2f}'.format})
+    df_results.index.name = 'rig'
+    # df_results.to_string(formatters={'hours/day': '{:,.2f}'.format, 'MH/s': '{:,.2f}'.format,
+    #                                    '\u03BCBTC/day': '{:,.2f}'.format})
+    results_str = df_results.to_markdown(floatfmt='.2f', tablefmt='github')
     print(results_str)
 
     if args.discord_id is None or args.discord_token is None:
@@ -114,7 +122,7 @@ if __name__ == "__main__":
     from discord import Webhook, RequestsWebhookAdapter, Embed, File
     webhook = Webhook.partial(args.discord_id, args.discord_token, adapter=RequestsWebhookAdapter())
     embed = Embed()
-    embed.title = f'{args.label} {start_datetime:%B}' if args.monthly else args.label
+    embed.title = title
     embed.colour = 15258703
     embed.description = f'```{start_datetime:%b %d %Y %H:%M:%S %Z} to {end_datetime:%b %d %Y %H:%M:%S %Z}\n' \
                         f'{results_str}```'
@@ -125,5 +133,7 @@ if __name__ == "__main__":
         print('Publish daily report')
         with open(file=f'daily_hours_{args.org}_{start_datetime:%Y_%m}.csv', mode='rb') as f:
             daily_hours_file = File(f)
-        webhook.send(username='Earn Your Hours', content=embed.title, file=daily_hours_file)
+        with open(file=f'daily_hours_{args.org}_{start_datetime:%Y_%m}.png', mode='rb') as f:
+            daily_hours_fig = File(f)
+        webhook.send(username='Earn Your Hours', content=embed.title, files=[daily_hours_file, daily_hours_fig])
     exit(0)

@@ -2,10 +2,16 @@
 
 Dependency
 * requests
+* pandas
+* discord
+* python-dateutil
 
 To install dependencies run following line your favorite shell console
 
     pip install requests
+    pip install pandas
+    pip install -U discord.py
+    pip install python-dateutil
     
     
 ## Required data and where to get it

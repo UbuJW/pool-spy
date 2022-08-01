@@ -39,6 +39,9 @@ if __name__ == "__main__":
                         action='store_true')
     args = parser.parse_args()
 
+    if not os.path.exists('data'):
+        os.makedirs('data')
+
     end_datetime = args.end_datetime.astimezone(timezone.utc)
     if args.monthly:
         start_datetime = datetime(end_datetime.year, end_datetime.month, 1, tzinfo=end_datetime.tzinfo)
@@ -49,7 +52,7 @@ if __name__ == "__main__":
         nb_days = args.days
         start_datetime = end_datetime - timedelta(days=nb_days)
 
-    rigs_filepath = f'rigs_{args.org}_{start_datetime:%Y_%m}.json'
+    rigs_filepath = os.path.join('data', f'rigs_{args.org}_{start_datetime:%Y_%m}.json')
     if os.path.exists(rigs_filepath):
         with open(rigs_filepath, 'r') as fp:
             rig_ids_names = json.load(fp)
@@ -75,7 +78,7 @@ if __name__ == "__main__":
         stats = private_api.get_rig_stats(rig_id, start_timestamp, end_timestamp)
         df = pd.DataFrame.from_records(stats['data'], columns=stats['columns'], index='time').sort_index()
         if args.monthly:
-            filename = f'{args.org}_{rig_id}_{start_datetime:%Y_%m}.csv'
+            filename = os.path.join('data', f'{args.org}_{rig_id}_{start_datetime:%Y_%m}.csv')
             if os.path.exists(filename):
                 df_cache = pd.read_csv(filename, index_col='time')
                 if len(df) > 0:
@@ -103,7 +106,7 @@ if __name__ == "__main__":
                                                            '\u03BCBTC/day': profitability * 10 ** 6}],
                                                          columns=df_results.columns, index=[rig_name])])
     df_daily_hours = pd.concat(dict_daily_hours, axis=1, sort=True).fillna(0)
-    df_daily_hours.to_csv(f'daily_hours_{args.org}_{start_datetime:%Y_%m}.csv')
+    df_daily_hours.to_csv(os.path.join('data', f'daily_hours_{args.org}_{start_datetime:%Y_%m}.csv'))
     import matplotlib.dates as md
     import matplotlib.pyplot as plt
 
@@ -112,7 +115,7 @@ if __name__ == "__main__":
                                                  yticks=range(0, 25, 2)).get_figure()
     plt.axhline(y=8, color='r', linestyle='--')
     plt.gca().xaxis.set_major_formatter(md.DateFormatter('%d'))
-    fig.savefig(f'daily_hours_{args.org}_{start_datetime:%Y_%m}.png')
+    fig.savefig(os.path.join('data', f'daily_hours_{args.org}_{start_datetime:%Y_%m}.png'))
     df_results = df_results.sort_index()
     df_results.loc["Total"] = df_results.sum()
     df_results.index.name = 'rig'
@@ -140,9 +143,9 @@ if __name__ == "__main__":
         webhook.send(username='Earn Your Hours', embed=embed)
     if args.publish_daily:
         print('Publish daily report')
-        with open(file=f'daily_hours_{args.org}_{start_datetime:%Y_%m}.csv', mode='rb') as f:
+        with open(file=os.path.join('data', f'daily_hours_{args.org}_{start_datetime:%Y_%m}.csv'), mode='rb') as f:
             daily_hours_file = File(f)
-        with open(file=f'daily_hours_{args.org}_{start_datetime:%Y_%m}.png', mode='rb') as f:
+        with open(file=os.path.join('data', f'daily_hours_{args.org}_{start_datetime:%Y_%m}.png'), mode='rb') as f:
             daily_hours_fig = File(f)
         webhook.send(username='Earn Your Hours', content=embed.title, files=[daily_hours_file, daily_hours_fig])
     exit(0)

@@ -15,7 +15,7 @@ def try_parsing_datetime(s):
         return datetime.strptime(s, '%Y-%m-%d-%H:%M:%S').replace(tzinfo=timezone.utc)
     except ValueError:
         t = datetime.strptime(s, '%H:%M:%S')
-        return datetime.now(timezone.utc).replace(hour=t.hour, minute=t.minute, second=t.second)
+        return datetime.now(timezone.utc).replace(hour=t.hour, minute=t.minute, second=t.second, microsecond=0)
 
 
 if __name__ == "__main__":

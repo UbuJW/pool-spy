@@ -71,7 +71,7 @@ if __name__ == "__main__":
     title = f'{args.label} {start_datetime:%B %Y}' if args.monthly else args.label
     if args.label is not None:
         print(title)
-    dict_daily_hours = {}
+    list_daily_hours = []
 
     print(f'{start_datetime:%b %d %Y %H:%M:%S %Z} to {end_datetime:%b %d %Y %H:%M:%S %Z}')
     for rig_id, rig_name in rig_ids_names.items():
@@ -97,7 +97,9 @@ if __name__ == "__main__":
         df.loc[df['time_delta'] > 5 * 60 * 1000, 'speed_diff'] = 0
         df.index = pd.to_datetime(df.index, unit='ms', utc=True)
         df = df[df['speed_diff'] != 0]
-        dict_daily_hours[rig_name] = df.groupby(df.index.date).sum()['time_delta'] / 1000 / 60 / 60
+        df_daily_hours = df.groupby(df.index.date).sum()['time_delta'] / 1000 / 60 / 60
+        df_daily_hours.name = rig_name
+        list_daily_hours.append(df_daily_hours)
         total_mining_ms = df['time_delta'].sum()
         avg_hr_per_day = total_mining_ms / 1000 / 60 / 60 / nb_days
         mh_per_sec = df[['speed_accepted', 'time_delta']].prod(axis=1).sum() / 1000 / 60 / 60 / 24 / nb_days
@@ -105,7 +107,7 @@ if __name__ == "__main__":
         df_results = pd.concat([df_results, pd.DataFrame([{'hours/day': avg_hr_per_day, 'MH/s': mh_per_sec,
                                                            '\u03BCBTC/day': profitability * 10 ** 6}],
                                                          columns=df_results.columns, index=[rig_name])])
-    df_daily_hours = pd.concat(dict_daily_hours, axis=1, sort=True).fillna(0)
+    df_daily_hours = pd.concat(list_daily_hours, axis=1, sort=True).fillna(0).groupby(level=0, axis=1, sort=True).sum()
     df_daily_hours.to_csv(os.path.join('data', f'daily_hours_{args.org}_{start_datetime:%Y_%m}.csv'))
     import matplotlib.dates as md
     import matplotlib.pyplot as plt

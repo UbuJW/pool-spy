@@ -25,7 +25,7 @@ if __name__ == "__main__":
     parser.add_argument('-o', '--organization_id', dest="org", help="Organization id", required=True)
     parser.add_argument('-k', '--key', dest="key", help="Api key", required=True)
     parser.add_argument('-s', '--secret', dest="secret", help="Secret for api key", required=True)
-    # parser.add_argument('-r', '--rigs', dest='rigs', help="Additional rigs", nargs='+', default=[])
+    parser.add_argument('-r', '--rigs', dest='rigs', help="Additional rigs", nargs='+', default=[])
     parser.add_argument('-d', '--days', dest='days', help="Lookback in days", type=int, choices=range(1, 7), default=7)
     parser.add_argument('-e', '--end_datetime', dest='end_datetime',
                         help='End datetime or time in UTC: yyyy-mm-dd-HH:MM:SS or HH:MM:SS',
@@ -60,8 +60,8 @@ if __name__ == "__main__":
         rig_ids_names = {}
     private_api = private_api(args.base, args.org, args.key, args.secret)
     registered_rigs = {rig['rigId']: rig['name'] for rig in private_api.get_rigs()['miningRigs']}
-    # rig_ids_names |= registered_rigs #| {rig: rig for rig in args.rigs} # for 3.9
-    rig_ids_names = {**rig_ids_names, **registered_rigs}
+    # rig_ids_names |= registered_rigs | {rig: rig for rig in args.rigs} # for 3.9
+    rig_ids_names = {**rig_ids_names, **registered_rigs, **{rig: rig for rig in args.rigs}}
     with open(rigs_filepath, 'w') as fp:
         json.dump(rig_ids_names, fp)
 
@@ -116,9 +116,10 @@ if __name__ == "__main__":
     plt.axhline(y=8, color='r', linestyle='--')
     plt.gca().xaxis.set_major_formatter(md.DateFormatter('%d'))
     fig.savefig(os.path.join('data', f'daily_hours_{args.org}_{start_datetime:%Y_%m}.png'))
-    df_results = df_results.sort_index()
-    df_results.loc["Total"] = df_results.sum()
+
     df_results.index.name = 'rig'
+    df_results = df_results.reset_index().groupby('rig', sort=True).sum()
+    df_results.loc["Total"] = df_results.sum()
     # df_results.to_string(formatters={'hours/day': '{:,.2f}'.format, 'MH/s': '{:,.2f}'.format,
     #                                    '\u03BCBTC/day': '{:,.2f}'.format})
     df_results.to_markdown(floatfmt='.2f', tablefmt='github')

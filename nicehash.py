@@ -307,6 +307,14 @@ class private_api:
             query += f'&beforeTimestamp={end_time}'
         return self.request("GET", f'/main/api/v2/mining/rig/stats/algo', query, None)
 
+    def get_pool_stats(self, start_time=None, end_time=None, algorithm=20):
+        query = f'algorithm={algorithm}'
+        if start_time is not None:
+            query += f'&afterTimestamp={start_time}'
+        if end_time is not None:
+            query += f'&beforeTimestamp={end_time}'
+        return self.request("GET", f'/main/api/v2/mining/rigs/stats/algo', query, None)
+
 
 if __name__ == "__main__":
     parser = optparse.OptionParser()

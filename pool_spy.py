@@ -18,6 +18,19 @@ def try_parsing_datetime(s):
         return datetime.now(timezone.utc).replace(hour=t.hour, minute=t.minute, second=t.second, microsecond=0)
 
 
+def merge_and_save_timeseries(df: pd.DataFrame, filename: str, monthly: bool = False):
+    df = pd.DataFrame.from_records(df['data'], columns=df['columns'], index='time').sort_index()
+    if monthly:
+        if os.path.exists(filename):
+            df_cache = pd.read_csv(filename, index_col='time')
+            if len(df) > 0:
+                df_cache = df_cache[df_cache.index < df.index[0]]
+            df = pd.concat([df_cache, df], sort=True)
+            assert not any(df.index.duplicated())
+        df.reindex(sorted(df.columns), axis=1).to_csv(filename)
+    return df
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-b', '--base_url', dest="base", help="Api base url", default="https://api2.nicehash.com")
@@ -74,18 +87,13 @@ if __name__ == "__main__":
     list_daily_hours = []
 
     print(f'{start_datetime:%b %d %Y %H:%M:%S %Z} to {end_datetime:%b %d %Y %H:%M:%S %Z}')
+    df = private_api.get_pool_stats(start_timestamp, end_timestamp)
+    filename = os.path.join('data', f'{args.org}_{start_datetime:%Y_%m}.csv')
+    df = merge_and_save_timeseries(df, filename, args.monthly)
     for rig_id, rig_name in rig_ids_names.items():
-        stats = private_api.get_rig_stats(rig_id, start_timestamp, end_timestamp)
-        df = pd.DataFrame.from_records(stats['data'], columns=stats['columns'], index='time').sort_index()
-        if args.monthly:
-            filename = os.path.join('data', f'{args.org}_{rig_id}_{start_datetime:%Y_%m}.csv')
-            if os.path.exists(filename):
-                df_cache = pd.read_csv(filename, index_col='time')
-                if len(df) > 0:
-                    df_cache = df_cache[df_cache.index < df.index[0]]
-                df = pd.concat([df_cache, df], sort=True)
-                assert not any(df.index.duplicated())
-            df.reindex(sorted(df.columns), axis=1).to_csv(filename)
+        df = private_api.get_rig_stats(rig_id, start_timestamp, end_timestamp)
+        filename = os.path.join('data', f'{args.org}_{rig_id}_{start_datetime:%Y_%m}.csv')
+        df = merge_and_save_timeseries(df, filename, args.monthly)
         df = df[['speed_accepted', 'profitability']]
         speed_diff = df.loc[:, 'speed_accepted'].diff().shift(-1)
         start_times = df.index.values[:-1]
@@ -109,8 +117,9 @@ if __name__ == "__main__":
                                                          columns=df_results.columns, index=[rig_name])])
     df_daily_hours = pd.concat(list_daily_hours, axis=1, sort=True).fillna(0).groupby(level=0, axis=1, sort=True).sum()
     df_daily_hours.to_csv(os.path.join('data', f'daily_hours_{args.org}_{start_datetime:%Y_%m}.csv'))
-    import matplotlib.dates as md
-    import matplotlib.pyplot as plt
+    df_daily_hours.index = pd.to_datetime(df_daily_hours.index, format='%Y-%m-%d').strftime('%d')
+    print(df_daily_hours.to_markdown(floatfmt='.2f', tablefmt='github'))
+    from matplotlib import dates as md, pyplot as plt
 
     plt.gca().xaxis.set_major_formatter(md.DateFormatter('%H:%M'))
     fig = df_daily_hours.expanding().mean().plot(title=f'{title} cumulative average hours',
@@ -124,7 +133,6 @@ if __name__ == "__main__":
     df_results.loc["Total"] = df_results.sum()
     # df_results.to_string(formatters={'hours/day': '{:,.2f}'.format, 'MH/s': '{:,.2f}'.format,
     #                                    '\u03BCBTC/day': '{:,.2f}'.format})
-    df_results.to_markdown(floatfmt='.2f', tablefmt='github')
     lines = df_results.to_markdown(floatfmt='.2f', tablefmt='github').splitlines()
     lines.insert(-1, lines[1])
     lines[1] = lines[1].replace('-', '=')

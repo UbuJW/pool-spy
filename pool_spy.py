@@ -3,11 +3,13 @@ import json
 import math
 import os.path
 from datetime import datetime, timedelta, timezone, time
-from dateutil.relativedelta import relativedelta
 
 import pandas as pd
+from dateutil.relativedelta import relativedelta
 
 from nicehash import private_api
+
+MINING_HOURS_THRESHOLD = 8
 
 
 def try_parsing_datetime(s):
@@ -31,6 +33,32 @@ def merge_and_save_timeseries(df: pd.DataFrame, filename: str, monthly: bool = F
     return df
 
 
+def save_fig(df: pd.DataFrame):
+    from matplotlib import dates as md, pyplot as plt
+    plt.gca().xaxis.set_major_formatter(md.DateFormatter('%H:%M'))
+    fig = df.expanding().mean().plot(title=f'{title} cumulative average hours',
+                                     yticks=range(0, 25, 2)).get_figure()
+    plt.axhline(y=MINING_HOURS_THRESHOLD, color='r', linestyle='--')
+    plt.gca().xaxis.set_major_formatter(md.DateFormatter('%d'))
+    fig.savefig(os.path.join('data', f'daily_hours_{args.org}_{start_datetime:%Y_%m}.png'))
+
+
+def get_btcusd():
+    import requests
+    response = requests.get('https://api.coindesk.com/v1/bpi/currentprice.json')
+    data = response.json()
+    return float(data["bpi"]["USD"]["rate"].replace(',', ''))
+
+
+def try_load_json(filepath: str):
+    if os.path.exists(filepath):
+        with open(filepath, 'r') as fp:
+            dico = json.load(fp)
+    else:
+        dico = {}
+    return dico
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-b', '--base_url', dest="base", help="Api base url", default="https://api2.nicehash.com")
@@ -50,6 +78,7 @@ if __name__ == "__main__":
                         action='store_true')
     parser.add_argument('-pd', '--publish_daily', dest='publish_daily', help="Publish daily report",
                         action='store_true')
+    parser.add_argument('-p', '--payout', dest='payout', help="Payout", action='store_true')
     args = parser.parse_args()
 
     if not os.path.exists('data'):
@@ -66,11 +95,7 @@ if __name__ == "__main__":
         start_datetime = end_datetime - timedelta(days=nb_days)
 
     rigs_filepath = os.path.join('data', f'rigs_{args.org}_{start_datetime:%Y_%m}.json')
-    if os.path.exists(rigs_filepath):
-        with open(rigs_filepath, 'r') as fp:
-            rig_ids_names = json.load(fp)
-    else:
-        rig_ids_names = {}
+    rig_ids_names = try_load_json(rigs_filepath)
     private_api = private_api(args.base, args.org, args.key, args.secret)
     registered_rigs = {rig['rigId']: rig['name'] for rig in private_api.get_rigs()['miningRigs']}
     # rig_ids_names |= registered_rigs | {rig: rig for rig in args.rigs} # for 3.9
@@ -88,7 +113,7 @@ if __name__ == "__main__":
 
     print(f'{start_datetime:%b %d %Y %H:%M:%S %Z} to {end_datetime:%b %d %Y %H:%M:%S %Z}')
     df = private_api.get_pool_stats(start_timestamp, end_timestamp)
-    filename = os.path.join('data', f'{args.org}_{start_datetime:%Y_%m}.csv')
+    filename = os.path.join('data', f'{args.org}.csv')
     df = merge_and_save_timeseries(df, filename, args.monthly)
     for rig_id, rig_name in rig_ids_names.items():
         df = private_api.get_rig_stats(rig_id, start_timestamp, end_timestamp)
@@ -118,15 +143,9 @@ if __name__ == "__main__":
     df_daily_hours = pd.concat(list_daily_hours, axis=1, sort=True).fillna(0).groupby(level=0, axis=1, sort=True).sum()
     df_daily_hours.to_csv(os.path.join('data', f'daily_hours_{args.org}_{start_datetime:%Y_%m}.csv'))
     df_daily_hours.index = pd.to_datetime(df_daily_hours.index, format='%Y-%m-%d').strftime('%d')
+    print('Daily mining hours')
     print(df_daily_hours.to_markdown(floatfmt='.2f', tablefmt='github'))
-    from matplotlib import dates as md, pyplot as plt
-
-    plt.gca().xaxis.set_major_formatter(md.DateFormatter('%H:%M'))
-    fig = df_daily_hours.expanding().mean().plot(title=f'{title} cumulative average hours',
-                                                 yticks=range(0, 25, 2)).get_figure()
-    plt.axhline(y=8, color='r', linestyle='--')
-    plt.gca().xaxis.set_major_formatter(md.DateFormatter('%d'))
-    fig.savefig(os.path.join('data', f'daily_hours_{args.org}_{start_datetime:%Y_%m}.png'))
+    save_fig(df_daily_hours)
 
     df_results.index.name = 'rig'
     df_results = df_results.reset_index().groupby('rig', sort=True).sum()
@@ -137,6 +156,7 @@ if __name__ == "__main__":
     lines.insert(-1, lines[1])
     lines[1] = lines[1].replace('-', '=')
     results_str = os.linesep.join(lines)
+    print('Monthly mining stats')
     print(results_str)
 
     if args.discord_id is None or args.discord_token is None:
@@ -150,13 +170,41 @@ if __name__ == "__main__":
     embed.description = f'```{start_datetime:%b %d %Y %H:%M:%S %Z} to {end_datetime:%b %d %Y %H:%M:%S %Z}\n' \
                         f'{results_str}```'
     if args.publish_monthly:
-        print('Publish monthly report')
+        print('\nPublish monthly report')
         webhook.send(username='Earn Your Hours', embed=embed)
     if args.publish_daily:
-        print('Publish daily report')
+        print('\nPublish daily report')
         with open(file=os.path.join('data', f'daily_hours_{args.org}_{start_datetime:%Y_%m}.csv'), mode='rb') as f:
             daily_hours_file = File(f)
         with open(file=os.path.join('data', f'daily_hours_{args.org}_{start_datetime:%Y_%m}.png'), mode='rb') as f:
             daily_hours_fig = File(f)
         webhook.send(username='Earn Your Hours', content=embed.title, files=[daily_hours_file, daily_hours_fig])
+
+    if args.payout:
+        print('\nPayout')
+        addresses_filepath = os.path.join('data', f'addresses_{args.label}.json')
+        dict_addresses = try_load_json(addresses_filepath)
+        dict_addresses = {**dict_addresses, **{address['name']: {'id': address['id'], 'address': address['address']}
+                                               for address in private_api.get_withdrawal_addresses('BTC')['list']}}
+        threshold_rig_names = df_results[:-1][df_results[:-1]['hours/day'] >= MINING_HOURS_THRESHOLD].index.tolist()
+        if not any(threshold_rig_names):
+            print(f'No miner mined for at least {MINING_HOURS_THRESHOLD} hours per day.')
+            exit(0)
+        available_btc = float(private_api.get_accounts_for_currency('BTC')['available'])
+        str_rig_names = threshold_rig_names[0] if len(threshold_rig_names) == 1 else ', '.join(
+            threshold_rig_names[:-1]) + f' and {threshold_rig_names[-1]}'
+        print(f'{str_rig_names} mined for at least {MINING_HOURS_THRESHOLD} hours per day.')
+        payout = available_btc * 1e8 // len(threshold_rig_names) * 1e-8
+        btcusd = get_btcusd()
+        print(f'{available_btc / 1e-6:.2f} \u03BCBTC (${btcusd * available_btc:.2f}) available in {args.label} wallet.')
+        print(f'Sending {payout / 1e-6:.2f} \u03BCBTC (${btcusd * payout:.2f}) '
+              f'less 5 \u03BCBTC (${btcusd * 5 * 1e-6:.2f}) NH withdrawal fee to:')
+        for rig_name in threshold_rig_names:
+            dict_address = dict_addresses[rig_name]
+            try:
+                id = private_api.withdraw_request(dict_address['id'], payout, 'BTC')
+                print(f'\t{rig_name}: {dict_address["address"]}, id: {id}')
+                # private_api.cancel_withdraw_request(id, 'BTC')
+            except BaseException as err:
+                print(err)
     exit(0)

@@ -169,7 +169,7 @@ class private_api:
     def get_accounts_for_currency(self, currency):
         return self.request('GET', '/main/api/v2/accounting/account2/' + currency, '', None)
 
-    def get_withdrawal_addresses(self, currency, size, page):
+    def get_withdrawal_addresses(self, currency, size=100, page=0):
 
         params = "currency={}&size={}&page={}".format(currency, size, page)
 
@@ -185,6 +185,9 @@ class private_api:
             "currency": currency
         }
         return self.request('POST', '/main/api/v2/accounting/withdrawal/', '', withdraw_data)
+
+    def cancel_withdraw_request(self, withdrawal_id, currency):
+        return self.request('DELETE', f'main/api/v2/accounting/withdrawal/{currency}/{withdrawal_id}', '', None)
 
     def get_my_active_orders(self, algorithm, market, limit):
 

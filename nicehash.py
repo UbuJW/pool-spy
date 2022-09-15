@@ -4,10 +4,18 @@ import optparse
 import urllib.parse
 import uuid
 from datetime import datetime
+from enum import IntEnum
 from hashlib import sha256
 from time import mktime
 
 import requests
+
+
+class AlgorithmType(IntEnum):
+    DAGGERHASHIMOTO = 20  # ETH
+    ETCHASH = 60  # ETC
+    KAWPOW = 52  # RAVENCOIN
+    AUTOLYKOS = 57  # ERGO
 
 
 class public_api:
@@ -302,7 +310,7 @@ class private_api:
         query = ""
         return self.request("GET", "/main/api/v2/mining/rigs2", query, None)
 
-    def get_rig_stats(self, rig_id, start_time=None, end_time=None, algorithm=20):
+    def get_rig_stats(self, rig_id, start_time=None, end_time=None, algorithm: AlgorithmType = AlgorithmType.DAGGERHASHIMOTO):
         query = f'algorithm={algorithm}&rigId={urllib.parse.quote(rig_id)}'
         if start_time is not None:
             query += f'&afterTimestamp={start_time}'
@@ -310,7 +318,7 @@ class private_api:
             query += f'&beforeTimestamp={end_time}'
         return self.request("GET", f'/main/api/v2/mining/rig/stats/algo', query, None)
 
-    def get_pool_stats(self, start_time=None, end_time=None, algorithm=20):
+    def get_pool_stats(self, start_time=None, end_time=None, algorithm: AlgorithmType = AlgorithmType.DAGGERHASHIMOTO):
         query = f'algorithm={algorithm}'
         if start_time is not None:
             query += f'&afterTimestamp={start_time}'
